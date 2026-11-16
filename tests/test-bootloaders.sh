@@ -152,5 +152,24 @@ echo "BOOT_IMAGE=/vmlinuz root=/dev/sda2" > /fake-cmdline; stub update-grub' '
 . /etc/default/grub; for f in /etc/default/grub.d/*.cfg; do . "$f"; done
 [ "$GRUB_CMDLINE_LINUX_DEFAULT" = "quiet amd_iommu=off amdgpu.gttsize=131072 ttm.pages_limit=32505856 ttm.page_pool_size=32505856 zswap.enabled=0" ]' '--iommu off'
 
+# 16. Ubuntu GRUB without /etc/default/grub.d: the real grub-mkconfig reads it, so the folder is created
+run_case "grub (ubuntu, no grub.d folder yet)" ubuntu:26.04 '
+apt-get update -qq >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq grub-common >/dev/null 2>&1
+rm -rf /etc/default/grub.d; mkdir -p /boot/grub; : > /boot/grub/grub.cfg
+printf "GRUB_DEFAULT=0\nGRUB_CMDLINE_LINUX_DEFAULT=\"quiet splash\"\nGRUB_CMDLINE_LINUX=\"amd_iommu=off\"\n" > /etc/default/grub
+echo "BOOT_IMAGE=/vmlinuz root=/dev/sda2" > /fake-cmdline; stub update-grub' '
+[ -f /etc/default/grub.d/90-halogen.cfg ]
+grep -q "^update-grub" /stub.log.1
+. /etc/default/grub; for f in /etc/default/grub.d/*.cfg; do . "$f"; done
+[ "$GRUB_CMDLINE_LINUX_DEFAULT" = "quiet splash $P" ] && [ -z "$GRUB_CMDLINE_LINUX" ]'
+
+# 17. GRUB without drop-in support: amd_iommu=off in GRUB_CMDLINE_LINUX is removed in place
+run_case "grub (in place, GRUB_CMDLINE_LINUX cleaned)" fedora:44 '
+mkdir -p /boot/grub; : > /boot/grub/grub.cfg
+printf "GRUB_CMDLINE_LINUX_DEFAULT=\"quiet\"\nGRUB_CMDLINE_LINUX=\"rhgb amd_iommu=off zswap.enabled=1\"\n" > /etc/default/grub
+echo "BOOT_IMAGE=/vmlinuz root=/dev/sda2" > /fake-cmdline; stub grub-mkconfig' '
+grep -qx "GRUB_CMDLINE_LINUX_DEFAULT=\"quiet $P\"" /etc/default/grub
+grep -qx "GRUB_CMDLINE_LINUX=\"rhgb\"" /etc/default/grub'
+
 echo; echo "passed: $pass  failed: $fail"
 [ "$fail" = 0 ]

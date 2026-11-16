@@ -149,7 +149,9 @@ The script finds the boot loader automatically and edits its configuration:
 - systemd-boot (and `/etc/kernel/cmdline` when kernel-install manages the entries)
 - unified kernel images (UKI), with `mkinitcpio`, `dracut` or `kernel-install`
 - GRUB (with `grubby` on Fedora, a drop-in in `/etc/default/grub.d/` on Debian
-  and Ubuntu, otherwise `/etc/default/grub`)
+  and Ubuntu, otherwise `/etc/default/grub`). On Debian and Ubuntu,
+  `update-grub` reads this folder also when the install does not have it yet.
+  The script then makes the folder.
 - rEFInd, Limine and extlinux/syslinux
 - EFISTUB: the script prints the `efibootmgr` command. You must run it yourself.
 
@@ -183,7 +185,7 @@ first build takes approximately 5 to 15 minutes.
 
 ## Tests
 
-`tests/test-bootloaders.sh` runs 15 boot-loader cases in Ubuntu 26.04 and
+`tests/test-bootloaders.sh` runs 17 boot-loader cases in Ubuntu 26.04 and
 Fedora 44 containers. Each case runs the script two times and makes sure that
 the second run changes nothing. Docker is necessary.
 

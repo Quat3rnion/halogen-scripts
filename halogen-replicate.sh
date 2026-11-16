@@ -616,7 +616,17 @@ cmdline_grub() {
     return
   fi
   [ -f /etc/default/grub ] || { warn "GRUB: /etc/default/grub not found"; return; }
-  if [ -d /etc/default/grub.d ]; then
+  # Debian/Ubuntu's grub-mkconfig reads /etc/default/grub.d/*.cfg after /etc/default/grub, even when
+  # the folder is missing on a given install. Use a drop-in whenever this grub-mkconfig reads one.
+  local grubd=0 m
+  if [ -d /etc/default/grub.d ]; then grubd=1
+  else
+    for m in /usr/sbin/grub-mkconfig /sbin/grub-mkconfig /usr/sbin/grub2-mkconfig /usr/bin/grub-mkconfig; do
+      if [ -f "$m" ] && grep -q 'default/grub\.d' "$m"; then grubd=1; break; fi
+    done
+  fi
+  if [ "$grubd" = 1 ]; then
+    if [ ! -d /etc/default/grub.d ]; then doit mkdir -p /etc/default/grub.d; fi
     # Debian/Ubuntu: a drop-in sourced after /etc/default/grub (and after cloud-image drop-ins).
     # It first strips other values of the same keys: amd_iommu flags add up (amd_iommu=off would stay
     # in force next to amd_iommu=pt), so appending alone is not enough.
@@ -632,12 +642,20 @@ cmdline_grub() {
   else
     old=$(sed -n 's/^GRUB_CMDLINE_LINUX_DEFAULT=["'\'']\?\(.*\)["'\'']\?$/\1/p' /etc/default/grub | tail -1 | sed 's/["'\'']$//')
     new=$(add_params "$old")
-    if [ "$old" = "$new" ] && grep -q '^GRUB_CMDLINE_LINUX_DEFAULT=' /etc/default/grub; then note "unchanged: /etc/default/grub"; return; fi
+    # GRUB_CMDLINE_LINUX goes on every entry before the default options: remove the same keys there,
+    # or an amd_iommu=off in it would stay in force next to amd_iommu=pt.
+    local oldl newl k
+    oldl=$(sed -n 's/^GRUB_CMDLINE_LINUX=["'\'']\?\(.*\)["'\'']\?$/\1/p' /etc/default/grub | tail -1 | sed 's/["'\'']$//')
+    newl=" $oldl "
+    for k in "${CMDLINE_PARAMS[@]}"; do newl=$(printf '%s' "$newl" | sed -E "s/[[:space:]]${k%%=*}=[^[:space:]]*/ /g"); done
+    newl=$(printf '%s' "$newl" | tr -s ' ' | sed -E 's/^ //; s/ $//')
+    if [ "$old" = "$new" ] && [ "$oldl" = "$newl" ] && grep -q '^GRUB_CMDLINE_LINUX_DEFAULT=' /etc/default/grub; then note "unchanged: /etc/default/grub"; return; fi
     if grep -q '^GRUB_CMDLINE_LINUX_DEFAULT=' /etc/default/grub; then
       sed "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"$new\"|" /etc/default/grub
     else
       cat /etc/default/grub; printf 'GRUB_CMDLINE_LINUX_DEFAULT="%s"\n' "$new"
-    fi | put_file /etc/default/grub 0644 root:root
+    fi | if [ "$oldl" != "$newl" ]; then sed "s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\"$newl\"|"; else cat; fi \
+      | put_file /etc/default/grub 0644 root:root
   fi
   [ "$PUT_CHANGED" = 1 ] || return 0
   if command -v update-grub >/dev/null; then doit update-grub

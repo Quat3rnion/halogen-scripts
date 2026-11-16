@@ -1,0 +1,6 @@
+#!/bin/sh
+# fake grubby: remembers --args in /grubby-args; --info prints them
+case "$*" in
+  *--info*) printf 'kernel="/boot/vmlinuz-6.20"\nargs="ro quiet amd_iommu=off%s"\n' "$(cat /grubby-args 2>/dev/null)" ;;
+  *--args=*) echo "grubby $*" >> /stub.log; a=${*##*--args=}; printf ' %s' "$a" >> /grubby-args ;;
+esac
